@@ -10,37 +10,77 @@
 #include <iostream>
 #include <fstream>
 #include <string>   
+#include <vector>
+#include <thread>
+#include <mutex>
 #include <cpr/cpr.h>
 
 using namespace std;
 
-int main() {
-    string target_url = "http://example.com/"; 
-    ifstream MyReadFile("wordlist.txt");
-    string myText;
+mutex mtx;
+size_t index_primary = 0;
+vector<string> wordlist;
+string target_url = "http://target.com/"; 
 
-    if (!MyReadFile.is_open()) {
-        cerr << "Lỗi: Không tìm thấy file wordlist.txt!" << endl;
+void scan_worker() {
+    while(true) {
+        string word;
+
+        mtx.lock();
+        if(index_primary >= wordlist.size()) {
+            mtx.unlock();
+            break;
+        }
+        word = wordlist[index_primary];
+        index_primary++;
+        mtx.unlock();
+
+        auto r = cpr::Get(cpr::Url{target_url + word}, cpr::Timeout{5000});
+
+        if(r.status_code == 200 || r.status_code == 403) {
+            lock_guard<mutex> lock(mtx);
+            cout << "[" << r.status_code << "] Found: " << target_url << word << endl;
+        }
+    }
+}
+
+int main() {
+    ifstream file("wordlist.txt");
+    string line;
+
+    if (!file.is_open()) {
+        cerr << "Loi: Khong tim thay file wordlist.txt!" << endl;
         return 1;
     }
 
-    cout << "--- Bat dau quet: " << target_url << " ---" << endl;
+    while (getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back(); 
+        if (!line.empty()) wordlist.push_back(line);
+    }
+    file.close();
 
-    while (getline(MyReadFile, myText)) {
-        if (myText.empty()) continue;
-
-        auto r = cpr::Get(cpr::Url{target_url + myText});
-
-        if (r.status_code == 200) {
-            cout << "[+] Tim thay: " << target_url << myText << " (Status: " << r.status_code << ")" << endl;
-        } else if (r.status_code == 403) {
-            cout << "[!] Cam truy cap: " << target_url << myText << " (Status: 403)" << endl;
-        }
+    if (wordlist.empty()) {
+        cout << "Wordlist rong!" << endl;
+        return 0;
     }
 
-    MyReadFile.close();
-    cout << "--- Hoan thanh ---" << endl;
+    cout << "Ban muon quet voi bao nhieu luong: ";
+    int num_threads;
+    cin >> num_threads;
+
+    if (num_threads > wordlist.size()) num_threads = wordlist.size();
+
+    vector<thread> workers;
+    cout << "---- Dang quet " << wordlist.size() << " duong dan voi " << num_threads << " luong ----" << endl;
+
+    for(int i = 0; i < num_threads; ++i) {
+        workers.push_back(thread(scan_worker));
+    }
+
+    for(auto &t : workers) {
+        t.join();
+    }
+
+    cout << "--- Completed ---" << endl;
     return 0;
 }
-
-
