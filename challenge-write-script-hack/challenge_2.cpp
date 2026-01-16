@@ -1,4 +1,5 @@
-//thử thách: xây dựng chương trình khai thác và tấn công lỗ hổng vsftpd 2.3.4
+//thử thách: xây dựng chương trình khai thác và tấn công lỗ hổng vsftpd 2.3.4 với c++
+
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
